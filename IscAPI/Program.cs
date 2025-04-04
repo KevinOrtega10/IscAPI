@@ -1,4 +1,4 @@
-//var builder = WebApplication.CreateBuilder(args);
+ï»¿//var builder = WebApplication.CreateBuilder(args);
 
 //// Add services to the container.
 
@@ -24,6 +24,8 @@
 
 //app.Run();
 
+using Asp.Versioning;
+using Asp.Versioning.ApiExplorer;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -31,10 +33,30 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ?? Clave secreta para firmar los tokens JWT
-var key = Encoding.ASCII.GetBytes("YourSuperSecretKeyWithAtLeast32Characters"); // ?? Asegúrate que sea igual en AuthController
+// ðŸ” Clave secreta JWT
+var key = Encoding.ASCII.GetBytes("YourSuperSecretKeyWithAtLeast32Characters"); // âš ï¸ AsegÃºrate de mantener la misma en AuthController
 
-// ?? Configuración de autenticación JWT
+// âœ… Servicios MVC
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+
+// âœ… Versionado de la API
+builder.Services
+    .AddApiVersioning(options =>
+    {
+        options.DefaultApiVersion = new ApiVersion(1, 0); // v1 por defecto
+        options.AssumeDefaultVersionWhenUnspecified = true;
+        options.ReportApiVersions = true;
+        options.ApiVersionReader = new UrlSegmentApiVersionReader(); // Ejemplo: /api/v1/tucontrolador
+    })
+    .AddMvc()
+    .AddApiExplorer(options =>
+    {
+        options.GroupNameFormat = "'v'VVV";
+        options.SubstituteApiVersionInUrl = true;
+    });
+
+// âœ… AutenticaciÃ³n JWT
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -53,13 +75,22 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// ?? Configuración de Swagger con soporte para JWT
-builder.Services.AddSwaggerGen(c =>
+// âœ… Swagger con versiones + JWT
+builder.Services.AddSwaggerGen(options =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "ApiPokemonListas", Version = "v1" });
+    var provider = builder.Services.BuildServiceProvider()
+        .GetRequiredService<IApiVersionDescriptionProvider>();
 
-    // Define el esquema de seguridad JWT
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    foreach (var description in provider.ApiVersionDescriptions)
+    {
+        options.SwaggerDoc(description.GroupName, new OpenApiInfo
+        {
+            Title = $"ApiISC {description.ApiVersion}",
+            Version = description.GroupName
+        });
+    }
+
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "Introduce tu token JWT con el prefijo 'Bearer'. Ejemplo: Bearer {token}",
         Name = "Authorization",
@@ -68,8 +99,7 @@ builder.Services.AddSwaggerGen(c =>
         Scheme = "Bearer"
     });
 
-    // Aplica el esquema a todas las operaciones
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
             new OpenApiSecurityScheme
@@ -85,25 +115,30 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// ?? Servicios MVC (controladores)
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer(); // Swagger UI
-
 var app = builder.Build();
 
-// ?? Middleware
+// âœ… Middleware
 if (app.Environment.IsDevelopment())
 {
+    var apiVersionProvider = app.Services.GetRequiredService<IApiVersionDescriptionProvider>();
+
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(options =>
+    {
+        foreach (var description in apiVersionProvider.ApiVersionDescriptions)
+        {
+            options.SwaggerEndpoint(
+                $"/swagger/{description.GroupName}/swagger.json",
+                description.GroupName.ToUpperInvariant());
+        }
+    });
 }
 
 app.UseHttpsRedirection();
-
-app.UseAuthentication();    // ??? Autenticación JWT
-app.UseAuthorization();     // ?? Reglas de autorización (como [Authorize])
-
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
 

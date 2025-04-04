@@ -4,7 +4,7 @@
 //    {
 //    }
 //}
-
+using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
 using IscAPI.Models;
 using System.Data.SqlClient;
@@ -15,6 +15,7 @@ namespace IscAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize(Roles = "Admin")]
     [Authorize]
     public class IscController : ControllerBase
     {
